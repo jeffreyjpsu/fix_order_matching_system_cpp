@@ -711,5 +711,3 @@ This C++ order matching engine is a **well-crafted example** of high-performance
 - **Domain expertise** (order matching, FIX protocol, trading systems)
 - **Production-ready practices** (testing, logging, configuration, error handling)
 - **Performance optimization** (cache alignment, memory pooling, zero-copy)
-
-While it has some limitations (older C++ standard, limited order types), it serves as an **excellent reference implementation** for anyone building low-latency trading systems or studying concurrent programming in C++.
