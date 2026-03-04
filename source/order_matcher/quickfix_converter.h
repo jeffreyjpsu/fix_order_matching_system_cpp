@@ -19,8 +19,11 @@ inline OrderType convertOrderTypeFromQuickFix(const FIX::OrdType& ordType) throw
         case FIX::OrdType_LIMIT: 
             return OrderType::LIMIT;
 
+        case FIX::OrdType_MARKET:
+            return OrderType::MARKET;
+
         default: 
-            throw std::invalid_argument("Unsupported Order Type, use limit");
+            throw std::invalid_argument("Unsupported Order Type, use limit or market");
     }
 }
 

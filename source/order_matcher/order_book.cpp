@@ -60,61 +60,28 @@ void OrderBook::accept(Visitor<Order>& v)
 
 void OrderBook::insert(const Order& order)
 {
-    if (order.getSide() == OrderSide::BUY)
+    if (order.getOrderType() == OrderType::MARKET)
+    {
+        if (order.getSide() == OrderSide::BUY)
+        {
+            // Market Buy orders go to the front of bids, after any existing Market orders (FIFO)
+            auto it = std::find_if(m_bids.types.begin(), m_bids.types.end(),
+                [](OrderType t){ return t != OrderType::MARKET; });
+            size_t index = std::distance(m_bids.types.begin(), it);
+            m_bids.insert(index, order);
+        }
+        else
+        {
+            // Market Sell orders go to the front of asks, after any existing Market orders (FIFO)
+            auto it = std::find_if(m_asks.types.begin(), m_asks.types.end(),
+                [](OrderType t){ return t != OrderType::MARKET; });
+            size_t index = std::distance(m_asks.types.begin(), it);
+            m_asks.insert(index, order);
+        }
+    }
+    else if (order.getSide() == OrderSide::BUY)
     {
         // Insert into m_bids (Descending price)
-        // Upper Bound with Greater -> first element where order.price > elem is FALSE.
-        // i.e. first element where order.price <= elem.
-        // Wait.
-        // Descending: [100, 90, 80]. Insert 95.
-        // 100 > 95 (True).
-        // 90 > 95 (False).
-        // Upper bound (greater) returns iterator to 90.
-        // We insert at 90. Result: [100, 95, 90, 80]. Correct.
-        
-        // Equal prices: [100, 95(1)]. Insert 95(2).
-        // 100 > 95 (True).
-        // 95(1) > 95 (False).
-        // Returns 95(1). Insert at 95(1). Result [100, 95(2), 95(1)]. WRONG.
-        // We want FIFO.
-        // We need first element where !(elem > val) -> elem <= val.
-        // If we use lower_bound (greater): first element where !(elem > val) is FALSE ??
-        // lower_bound(pred): first element where pred(elem, val) is FALSE. (i.e. elem >= val ?)
-        // Standard lower_bound(start, end, val, pred)
-        // Returns first it where pred(*it, val) is false.
-        // pred = greater. *it > val.
-        // [100, 95(1)]. val=95.
-        // 100 > 95 (True). Iter++.
-        // 95(1) > 95 (False). Returns 95(1).
-        // Insert at 95(1) gives [100, 95(2), 95(1)]. Still LIFO for equal prices.
-        
-        // We want to skip all EQUAL values too.
-        // We want first element where element < val.
-        // i.e. ! (element >= val).
-        // Effectively we want the position AFTER the last equal element.
-        // Since we are sorting descending...
-        
-        // Let's iterate linearly from the 'upper_bound' or similar?
-        // Actually, if we use `operator>=` as comparator?
-        // Let's simply iterate. Reference implementation used multimap which handles this via standard strict weak ordering (key < val or key > val).
-        // Multimap `insert` just adds. `equal_range` gives range.
-        // To maintain FIFO, we append to the end of the equal range.
-        
-        // Let's use linear search for now or fix the binary search predicate.
-        // We want the first element `e` such that `e < val`.
-        // [100, 95(1), 90]. val=95.
-        // 100 < 95 False.
-        // 95 < 95 False.
-        // 90 < 95 True.
-        // Insert at 90. Result [100, 95(1), 95(2), 90]. Correct.
-        // Predicate: `element < val`.
-        // std::partition_point or hand roll loop?
-        // auto it = std::find_if(begin, end, [price](double p){ return p < price; });
-        // This is O(N) scan. For vector insert is O(N) anyway so O(N) find is acceptable complexity-wise (cache-friendly).
-        // Binary search is O(log N).
-        // upper_bound with (val, elem) -> val < elem ?
-        // Let's use a lambda for clarity.
-        
         auto it = std::find_if(m_bids.prices.begin(), m_bids.prices.end(), 
             [&order](double p){ return p < order.getPrice(); });
             
@@ -124,15 +91,6 @@ void OrderBook::insert(const Order& order)
     else
     {
         // Insert into m_asks (Ascending price)
-        // [80, 90]. Insert 85.
-        // 80.
-        // 90. 90 > 85. Insert at 90. Result [80, 85, 90].
-        // Equal: [80, 85(1), 90]. Insert 85.
-        // 80.
-        // 85(1).
-        // 90. Insert at 90. Result [80, 85(1), 85(2), 90]. Correct.
-        // We want first element where element > val.
-        
         auto it = std::find_if(m_asks.prices.begin(), m_asks.prices.end(), 
             [&order](double p){ return p > order.getPrice(); });
             
@@ -195,7 +153,29 @@ void OrderBook::erase(const Order& order)
 
 void OrderBook::matchTwoOrders(size_t bidIndex, size_t askIndex)
 {
-    double executionPrice = m_asks.prices[askIndex];
+    double executionPrice = 0.0;
+    OrderType bidType = m_bids.types[bidIndex];
+    OrderType askType = m_asks.types[askIndex];
+
+    if (bidType == OrderType::LIMIT && askType == OrderType::LIMIT)
+    {
+        executionPrice = m_asks.prices[askIndex];
+    }
+    else if (bidType == OrderType::MARKET && askType == OrderType::LIMIT)
+    {
+        executionPrice = m_asks.prices[askIndex];
+    }
+    else if (bidType == OrderType::LIMIT && askType == OrderType::MARKET)
+    {
+        executionPrice = m_bids.prices[bidIndex];
+    }
+    else // MARKET vs MARKET
+    {
+        executionPrice = m_lastTradePrice;
+    }
+
+    m_lastTradePrice = executionPrice;
+
     long quantity = std::min(m_bids.openQuantities[bidIndex], m_asks.openQuantities[askIndex]);
     
     // Update Bid
@@ -243,8 +223,10 @@ bool OrderBook::processMatching(queue<Order>& processedOrders)
         
         double bidPrice = m_bids.prices[0];
         double askPrice = m_asks.prices[0];
+        OrderType bidType = m_bids.types[0];
+        OrderType askType = m_asks.types[0];
 
-        if (bidPrice >= askPrice)
+        if (bidType == OrderType::MARKET || askType == OrderType::MARKET || bidPrice >= askPrice)
         {
             anyProcessed = true;
             

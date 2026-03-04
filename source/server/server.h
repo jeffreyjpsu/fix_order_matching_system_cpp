@@ -25,7 +25,7 @@ class Server : public boost::noncopyable, public FIX::Application, public FIX::M
 {
     public:
     
-        Server(const std::string& fixEngineConfigFile, bool pinThreadsToCores, int threadStackSize, bool hyperThreading, unsigned int queueSizePerThread, const std::vector<std::string>& symbols) throw(std::runtime_error);
+        Server(const std::string& fixEngineConfigFile, bool pinThreadsToCores, int threadStackSize, bool hyperThreading, unsigned int queueSizePerThread, const std::vector<std::string>& symbols);
         ~Server();
         void run();
 
@@ -34,15 +34,16 @@ class Server : public boost::noncopyable, public FIX::Application, public FIX::M
         // FIX Engine Application overloads
         void onCreate(const FIX::SessionID&) override;
         void toAdmin(FIX::Message&, const FIX::SessionID&) override;
-        void fromAdmin(const FIX::Message&, const FIX::SessionID&) throw(FIX::FieldNotFound, FIX::IncorrectDataFormat, FIX::IncorrectTagValue, FIX::RejectLogon) override;
+        void fromAdmin(const FIX::Message&, const FIX::SessionID&) override;
         void onLogon(const FIX::SessionID& sessionID) override;
         void onLogout(const FIX::SessionID& sessionID) override;
-        void toApp(FIX::Message&, const FIX::SessionID&) throw(FIX::DoNotSend) override;
-        void fromApp(const FIX::Message& message, const FIX::SessionID& sessionID) throw(FIX::FieldNotFound, FIX::IncorrectDataFormat, FIX::IncorrectTagValue, FIX::UnsupportedMessageType) override;
+        void toApp(FIX::Message&, const FIX::SessionID&) override;
+        void fromApp(const FIX::Message& message, const FIX::SessionID& sessionID) override;
 
-        // FIX Engine MessageCracker overloads
-        void onMessage(const FIX42::NewOrderSingle&, const FIX::SessionID&);
-        void onMessage(const FIX42::OrderCancelRequest&, const FIX::SessionID&);
+        // FIX Engine MessageCracker overloads, bring base class overrides into scope
+        using FIX::MessageCracker::onMessage;
+        void onMessage(const FIX42::NewOrderSingle&, const FIX::SessionID&) override;
+        void onMessage(const FIX42::OrderCancelRequest&, const FIX::SessionID&) override;
 
         std::string m_fixEngineConfigFile;
         order_matcher::CentralOrderBook m_centralOrderBook;

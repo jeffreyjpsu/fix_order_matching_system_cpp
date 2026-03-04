@@ -102,6 +102,7 @@ class OrderBook : public utility::Visitable<Order>
     private:
         std::string m_symbol;
         long m_lastOrderID = 0;
+        double m_lastTradePrice = 0.0;
         
         OrderArrays m_bids;
         OrderArrays m_asks;

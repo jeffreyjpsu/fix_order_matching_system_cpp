@@ -8,7 +8,7 @@ namespace order_matcher
 {
 
 enum class OrderSide { BUY, SELL };
-enum class OrderType { LIMIT,  };
+enum class OrderType { LIMIT, MARKET };
 
 using FlyweightStdString = boost::flyweights::flyweight<std::string>;
 
